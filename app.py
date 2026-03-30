@@ -1,54 +1,24 @@
+import io
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
-# ==========================
-# Upload file section
-# ==========================
-st.title("Sistem Hierarki Pangkat Tentera")
-uploaded_file = st.file_uploader("Upload fail CSV/Excel", type=["csv", "xlsx"])
+# =========================================================
+# CONFIG
+# =========================================================
+st.set_page_config(
+    page_title="Sistem Hierarki Pangkat Tentera",
+    page_icon="🪖",
+    layout="wide"
+)
 
-if uploaded_file is not None:
-    # Load the data
-    df = pd.read_excel(uploaded_file)
+st.title("🪖 Sistem Hierarki Pangkat Tentera")
+st.caption(
+    "Upload fail CSV/Excel untuk susun anggota mengikut hierarki pangkat, nombor tentera, "
+    "serta tapis ikut unit dan semak duplicate."
+)
 
-    # Check for necessary columns
-    if 'no_tentera' not in df.columns:
-        st.error("Column 'no_tentera' is missing from the data.")
-        st.stop()
-
-    # ==========================
-    # Step 1: Detect first 3 no_tentera
-    # ==========================
-    first_three_no_tentera = df['no_tentera'].head(3).tolist()
-
-    # ==========================
-    # Step 2: Sort the data by 'no_tentera'
-    # ==========================
-    sorted_df = df.sort_values(by='no_tentera')
-
-    # ==========================
-    # Step 3: Filter out the first 3 no_tentera for display
-    # ==========================
-    first_three_data = sorted_df[sorted_df['no_tentera'].isin(first_three_no_tentera)]
-
-    # ==========================
-    # Step 4: Combine first 3 with the rest of the data
-    # ==========================
-    final_sorted_df = pd.concat([first_three_data, sorted_df[~sorted_df['no_tentera'].isin(first_three_no_tentera)]])
-    final_sorted_df = final_sorted_df.reset_index(drop=True)
-
-    # Display the final sorted DataFrame
-    st.write(final_sorted_df)
-
-    # Optional: Button to download the sorted data as a CSV file
-    st.download_button(
-        label="Download Sorted Data",
-        data=final_sorted_df.to_csv(index=False).encode('utf-8'),
-        file_name="sorted_military_data.csv",
-        mime="text/csv"
-    )
-else:
-    st.info("Please upload a CSV/Excel file.")
 
 # =========================================================
 # HIERARKI PANGKAT
