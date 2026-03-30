@@ -1,12 +1,9 @@
-import io
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
-# =========================================================
+# ==========================
 # CONFIG
-# =========================================================
+# ==========================
 st.set_page_config(
     page_title="Sistem Hierarki Pangkat Tentera",
     page_icon="🪖",
@@ -19,12 +16,9 @@ st.caption(
     "serta tapis ikut unit dan semak duplicate."
 )
 
-
-# =========================================================
+# ==========================
 # HIERARKI PANGKAT
-# Nombor lebih kecil = pangkat lebih tinggi
-# Boleh ubah ikut struktur sebenar organisasi anda
-# =========================================================
+# ==========================
 RANK_HIERARCHY = {
     "jeneral": 1,
     "leftenan jeneral": 2,
@@ -45,17 +39,13 @@ RANK_HIERARCHY = {
     "prebet": 17
 }
 
-# Alias / variasi ejaan pangkat
 RANK_ALIASES = {
     "lt jeneral": "leftenan jeneral",
     "lt. jeneral": "leftenan jeneral",
     "mej jeneral": "mejar jeneral",
     "brig jen": "brigedier jeneral",
-    "brig. jeneral": "brigedier jeneral",
     "lt kolonel": "leftenan kolonel",
     "lt. kolonel": "leftenan kolonel",
-    "lt kol": "leftenan kolonel",
-    "lt. kol": "leftenan kolonel",
     "captain": "kapten",
     "capt": "kapten",
     "lt": "leftenan",
@@ -64,7 +54,6 @@ RANK_ALIASES = {
     "pw1": "pegawai waran 1",
     "pw 1": "pegawai waran 1",
     "pw2": "pegawai waran 2",
-    "pw 2": "pegawai waran 2",
     "ssjn": "staf sarjan",
     "sarjan staf": "staf sarjan",
     "lkpl": "lans koperal",
@@ -72,10 +61,10 @@ RANK_ALIASES = {
     "pbt": "prebet"
 }
 
-# Kolum minimum yang sistem perlukan
+# Kolum yang diperlukan dalam fail
 REQUIRED_COLUMNS = ["nama", "no_tentera", "pangkat"]
 
-# Kolum alternatif jika fail asal tidak ikut nama standard
+# Kolum alternatif untuk kes yang tidak sesuai dengan nama standard
 COLUMN_ALIASES = {
     "nama": ["nama", "name", "full_name", "anggota", "nama_anggota"],
     "no_tentera": ["no_tentera", "nombor_tentera", "military_no", "no tentera", "army_no", "service_no"],
@@ -85,9 +74,9 @@ COLUMN_ALIASES = {
     "bilik": ["bilik", "room", "no_bilik", "room_no", "bilik_penginapan"]
 }
 
-# =========================================================
+# ==========================
 # HELPERS
-# =========================================================
+# ==========================
 def normalize_text(value) -> str:
     if pd.isna(value):
         return ""
