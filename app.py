@@ -22,25 +22,12 @@ if uploaded_file is not None:
     # Load the file
     df = pd.read_excel(uploaded_file)
     
-    # ==========================
-    # ADD 'SERVICE' BASED ON 'no_tentera'
-    # ==========================
-    def assign_service(no_tentera):
-        no_tentera = str(no_tentera)
-        if no_tentera.startswith('37'):
-            return 'Air Force'
-        elif no_tentera.startswith('N/40'):
-            return 'Navy'
-        elif no_tentera.startswith('30'):
-            return 'Army'
-        else:
-            return 'Other'
-
-    # Apply the function to the 'no_tentera' column to create the 'service' column
-    df['service'] = df['no_tentera'].apply(assign_service)
-
+    # Add a 'service' column based on 'unit'
+    df['service'] = df['unit'].apply(lambda x: 'Army' if 'Batalion' in str(x) or 'Rejimen' in str(x) 
+                                     else ('Navy' if 'TLDM' in str(x) else ('Air Force' if 'TUDM' in str(x) else 'Other')))
+    
     # Display services for verification
-    st.write(df[['no_tentera', 'service']].drop_duplicates())
+    st.write(df[['unit', 'service']].drop_duplicates())
 
     # ==========================
     # PROCESSING DATA FOR EACH SERVICE
