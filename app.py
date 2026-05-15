@@ -22,49 +22,22 @@ st.caption(
 # HIERARKI PANGKAT & ALIASES
 # =========================================================
 RANK_HIERARCHY = {
-    "jeneral": 1,
-    "leftenan jeneral": 2,
-    "mejar jeneral": 3,
-    "brigedier jeneral": 4,
-    "kolonel": 5,
-    "leftenan kolonel": 6,
-    "mejar": 7,
-    "kapten": 8,
-    "leftenan": 9,
-    "leftenan muda": 10,
-    "pegawai waran 1": 11,
-    "pegawai waran 2": 12,
-    "staf sarjan": 13,
-    "sarjan": 14,
-    "koperal": 15,
-    "lans koperal": 16,
-    "prebet": 17
+    "jeneral": 1, "leftenan jeneral": 2, "mejar jeneral": 3, "brigedier jeneral": 4,
+    "kolonel": 5, "leftenan kolonel": 6, "mejar": 7, "kapten": 8, "leftenan": 9,
+    "leftenan muda": 10, "pegawai waran 1": 11, "pegawai waran 2": 12,
+    "staf sarjan": 13, "sarjan": 14, "koperal": 15, "lans koperal": 16, "prebet": 17
 }
 
 RANK_ALIASES = {
-    "lt jeneral": "leftenan jeneral",
-    "lt. jeneral": "leftenan jeneral",
-    "mej jeneral": "mejar jeneral",
-    "brig jen": "brigedier jeneral",
-    "brig. jeneral": "brigedier jeneral",
-    "lt kolonel": "leftenan kolonel",
-    "lt. kolonel": "leftenan kolonel",
-    "lt kol": "leftenan kolonel",
-    "lt. kol": "leftenan kolonel",
-    "captain": "kapten",
-    "capt": "kapten",
-    "lt": "leftenan",
-    "2nd lt": "leftenan muda",
-    "second lieutenant": "leftenan muda",
-    "pw1": "pegawai waran 1",
-    "pw 1": "pegawai waran 1",
-    "pw2": "pegawai waran 2",
-    "pw 2": "pegawai waran 2",
-    "ssjn": "staf sarjan",
-    "sarjan staf": "staf sarjan",
-    "lkpl": "lans koperal",
-    "l/kpl": "lans koperal",
-    "pbt": "prebet"
+    "lt jeneral": "leftenan jeneral", "lt. jeneral": "leftenan jeneral",
+    "mej jeneral": "mejar jeneral", "brig jen": "brigedier jeneral",
+    "brig. jeneral": "brigedier jeneral", "lt kolonel": "leftenan kolonel",
+    "lt. kolonel": "leftenan kolonel", "lt kol": "leftenan kolonel",
+    "lt. kol": "leftenan kolonel", "captain": "kapten", "capt": "kapten",
+    "lt": "leftenan", "2nd lt": "leftenan muda", "second lieutenant": "leftenan muda",
+    "pw1": "pegawai waran 1", "pw 1": "pegawai waran 1", "pw2": "pegawai waran 2",
+    "pw 2": "pegawai waran 2", "ssjn": "staf sarjan", "sarjan staf": "staf sarjan",
+    "lkpl": "lans koperal", "l/kpl": "lans koperal", "pbt": "prebet"
 }
 
 REQUIRED_COLUMNS = ["nama", "no_tentera", "pangkat"]
@@ -169,7 +142,7 @@ except AttributeError:
         return df
 
 # =========================================================
-# PREPARE DATA (SAFE)
+# PREPARE DATA - ultimate safe
 # =========================================================
 def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     data = df.copy()
@@ -177,34 +150,26 @@ def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     # Bersihkan semua kolum object safely
     for col in data.columns:
         try:
-            if hasattr(data[col], "dtype") and data[col].dtype == "object":
-                data[col] = data[col].fillna("").astype(str).str.strip()
-        except Exception:
             data[col] = data[col].apply(lambda x: "" if pd.isna(x) else str(x).strip())
+        except Exception:
+            data[col] = ["" for _ in range(len(data))]
 
-    # Pastikan kolum optional wujud
+    # Optional columns
     for optional_col in ["unit", "jawatan", "bilik", "kompeni", "platun", "subunit"]:
         if optional_col not in data.columns:
-            data[optional_col] = ""
+            data[optional_col] = [""] * len(data)
 
-    # Simpan nilai asal
-    data["pangkat_asal"] = data.get("pangkat", "")
-
-    # Standardkan pangkat
+    data["pangkat_asal"] = data.get("pangkat", [""]*len(data))
     data["pangkat_standard"] = data["pangkat"].apply(normalize_rank)
     data["level_pangkat"] = data["pangkat_standard"].apply(get_rank_level)
 
     # Medan carian safe
     for col in ["nama", "no_tentera", "unit", "jawatan", "bilik", "kompeni", "platun", "subunit"]:
         search_col = f"{col}_carian"
-        try:
-            data[search_col] = data[col].fillna("").astype(str).str.lower()
-        except Exception:
-            data[search_col] = data[col].apply(lambda x: "" if pd.isna(x) else str(x).lower())
+        data[search_col] = [str(x).lower() if pd.notna(x) else "" for x in data[col]]
 
-    # Sorting nombor tentera
     data["no_tentera_numeric"] = data["no_tentera"].apply(extract_number_for_sort)
-    data["no_tentera_text"] = data["no_tentera"].fillna("").astype(str)
+    data["no_tentera_text"] = [str(x) if pd.notna(x) else "" for x in data["no_tentera"]]
 
     return data
 
