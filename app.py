@@ -6,17 +6,12 @@ import streamlit as st
 # =========================================================
 # CONFIG
 # =========================================================
-st.set_page_config(
-    page_title="Sistem Hierarki Pangkat Tentera",
-    page_icon="🪖",
-    layout="wide"
-)
+st.set_page_config(page_title="Sistem Hierarki Pangkat Tentera",
+                   page_icon="🪖", layout="wide")
 
 st.title("🪖 Sistem Hierarki Pangkat Tentera")
-st.caption(
-    "Upload fail CSV/Excel untuk susun anggota mengikut hierarki pangkat, nombor tentera, "
-    "serta tapis ikut unit dan semak duplicate."
-)
+st.caption("Upload fail CSV/Excel untuk susun anggota mengikut hierarki pangkat, nombor tentera, "
+           "serta tapis ikut unit dan semak duplicate.")
 
 # =========================================================
 # HIERARCHI & ALIASES
@@ -29,13 +24,14 @@ RANK_HIERARCHY = {
 }
 
 RANK_ALIASES = {
-    "lt jeneral":"leftenan jeneral","lt. jeneral":"leftenan jeneral","mej jeneral":"mejar jeneral",
-    "brig jen":"brigedier jeneral","brig. jeneral":"brigedier jeneral","lt kolonel":"leftenan kolonel",
-    "lt. kolonel":"leftenan kolonel","lt kol":"leftenan kolonel","lt. kol":"leftenan kolonel",
-    "captain":"kapten","capt":"kapten","lt":"leftenan","2nd lt":"leftenan muda",
-    "second lieutenant":"leftenan muda","pw1":"pegawai waran 1","pw 1":"pegawai waran 1",
-    "pw2":"pegawai waran 2","pw 2":"pegawai waran 2","ssjn":"staf sarjan",
-    "sarjan staf":"staf sarjan","lkpl":"lans koperal","l/kpl":"lans koperal","pbt":"prebet"
+    "lt jeneral":"leftenan jeneral","lt. jeneral":"leftenan jeneral",
+    "mej jeneral":"mejar jeneral","brig jen":"brigedier jeneral","brig. jeneral":"brigedier jeneral",
+    "lt kolonel":"leftenan kolonel","lt. kolonel":"leftenan kolonel","lt kol":"leftenan kolonel",
+    "lt. kol":"leftenan kolonel","captain":"kapten","capt":"kapten","lt":"leftenan",
+    "2nd lt":"leftenan muda","second lieutenant":"leftenan muda",
+    "pw1":"pegawai waran 1","pw 1":"pegawai waran 1","pw2":"pegawai waran 2","pw 2":"pegawai waran 2",
+    "ssjn":"staf sarjan","sarjan staf":"staf sarjan","lkpl":"lans koperal","l/kpl":"lans koperal",
+    "pbt":"prebet"
 }
 
 REQUIRED_COLUMNS = ["nama","no_tentera","pangkat"]
@@ -51,85 +47,63 @@ def extract_number_for_sort(v):
     s = prettify_text(v)
     digits = "".join(c for c in s if c.isdigit())
     return int(digits) if digits else 999999999
-
 def validate_columns(df):
     return [c for c in REQUIRED_COLUMNS if c not in df.columns]
-
 def convert_df_to_csv(df): return df.to_csv(index=False).encode("utf-8-sig")
 def convert_df_to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer,index=False,sheet_name="hierarki_tentera")
     return output.getvalue()
-
 def build_rank_summary(df):
     summary = (df.groupby(["level_pangkat","pangkat_standard"],dropna=False)
                 .size().reset_index(name="jumlah")
                 .sort_values(["level_pangkat","pangkat_standard"]))
     return summary
 
-def standardize_columns(df):
-    df = df.copy()
-    for col in df.columns:
-        n = normalize_text(col)
-        if n in ["nama","name","full_name","anggota","nama_anggota"]: df.rename(columns={col:"nama"}, inplace=True)
-        if n in ["no_tentera","nombor_tentera","military_no","no tentera","army_no","service_no"]: df.rename(columns={col:"no_tentera"}, inplace=True)
-        if n in ["pangkat","rank"]: df.rename(columns={col:"pangkat"}, inplace=True)
-        if n in ["unit","pasukan","batalion","kompeni","cawangan"]: df.rename(columns={col:"unit"}, inplace=True)
-        if n in ["jawatan","position","role","appointment"]: df.rename(columns={col:"jawatan"}, inplace=True)
-        if n in ["bilik","room","no_bilik","room_no","bilik_penginapan"]: df.rename(columns={col:"bilik"}, inplace=True)
-    return df
-
 # =========================================================
 # LOAD FILE SAFE
 # =========================================================
-try:
-    @st.cache_data
-    def load_file(uploaded_file):
-        suffix = Path(uploaded_file.name).suffix.lower()
-        if suffix==".csv": df=pd.read_csv(uploaded_file)
-        elif suffix in [".xlsx",".xls"]: df=pd.read_excel(uploaded_file)
-        else: raise ValueError("Upload CSV atau Excel sahaja.")
-        df.columns = [prettify_text(c) for c in df.columns]
-        return standardize_columns(df)
-except AttributeError:
-    @st.cache
-    def load_file(uploaded_file):
-        suffix = Path(uploaded_file.name).suffix.lower()
-        if suffix==".csv": df=pd.read_csv(uploaded_file)
-        elif suffix in [".xlsx",".xls"]: df=pd.read_excel(uploaded_file)
-        else: raise ValueError("Upload CSV atau Excel sahaja.")
-        df.columns = [prettify_text(c) for c in df.columns]
-        return standardize_columns(df)
+@st.cache_data
+def load_file(uploaded_file):
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix==".csv": df=pd.read_csv(uploaded_file)
+    elif suffix in [".xlsx",".xls"]: df=pd.read_excel(uploaded_file)
+    else: raise ValueError("Upload CSV atau Excel sahaja.")
+    df.columns = [prettify_text(c) for c in df.columns]
+    return df
 
 # =========================================================
-# PREPARE DATA - ULTIMATE SAFE
+# PREPARE DATA - ultimate safe
 # =========================================================
 def prepare_data(df):
     data = df.copy()
     for col in data.columns:
-        try: data[col] = data[col].apply(lambda x: "" if pd.isna(x) else str(x).strip())
-        except: data[col] = pd.Series([""]*len(data),index=data.index)
+        try:
+            data[col] = data[col].apply(lambda x: "" if pd.isna(x) else str(x).strip())
+        except:
+            data[col] = pd.Series([""]*len(data),index=data.index)
     for optional_col in ["unit","jawatan","bilik","kompeni","platun","subunit"]:
         if optional_col not in data.columns:
-            data[optional_col]=pd.Series([""]*len(data),index=data.index)
-    data["pangkat_asal"]=data.get("pangkat",pd.Series([""]*len(data),index=data.index))
-    data["pangkat_standard"]=data["pangkat"].apply(normalize_rank)
-    data["level_pangkat"]=data["pangkat_standard"].apply(get_rank_level)
-    search_cols=["nama","no_tentera","unit","jawatan","bilik","kompeni","platun","subunit"]
+            data[optional_col] = pd.Series([""]*len(data),index=data.index)
+    data["pangkat_asal"] = data.get("pangkat",pd.Series([""]*len(data),index=data.index))
+    data["pangkat_standard"] = data["pangkat"].apply(normalize_rank)
+    data["level_pangkat"] = data["pangkat_standard"].apply(get_rank_level)
+    # Safe search columns
+    search_cols = ["nama","no_tentera","unit","jawatan","bilik","kompeni","platun","subunit"]
     for col in search_cols:
-        search_col=f"{col}_carian"
-        try: data[search_col]=data[col].apply(lambda x: str(x).lower() if pd.notna(x) else "")
-        except: data[search_col]=pd.Series([""]*len(data),index=data.index)
-    data["no_tentera_numeric"]=data["no_tentera"].apply(extract_number_for_sort)
+        search_col = f"{col}_carian"
+        try: data[search_col] = data[col].apply(lambda x: str(x).lower() if pd.notna(x) else "")
+        except: data[search_col] = pd.Series([""]*len(data),index=data.index)
+    data["no_tentera_numeric"] = data["no_tentera"].apply(extract_number_for_sort)
     data["no_tentera_text"] = data["no_tentera"].fillna("").astype(str)
     return data
 
 # =========================================================
-# SIDEBAR
+# SIDEBAR SETTINGS
 # =========================================================
 st.sidebar.header("Tetapan Sistem")
-uploaded_file = st.sidebar.file_uploader("Upload fail anggota",type=["csv","xlsx","xls"])
+uploaded_file = st.sidebar.file_uploader("Upload fail anggota", type=["csv","xlsx","xls"])
 sort_by_number = st.sidebar.checkbox("Susun nombor tentera",value=True)
 show_unknown_rank_only = st.sidebar.checkbox("Tunjuk pangkat tidak dikenali sahaja",value=False)
 show_duplicates_only = st.sidebar.checkbox("Tunjuk duplicate nombor tentera sahaja",value=False)
@@ -147,35 +121,48 @@ except Exception as e: st.error(f"Gagal membaca fail: {e}"); st.stop()
 missing_cols = validate_columns(raw_df)
 if missing_cols:
     st.error("Kolum wajib tiada dalam fail: "+", ".join(missing_cols))
-    st.write("Kolum ditemui:",list(raw_df.columns))
+    st.write("Kolum ditemui:", list(raw_df.columns))
     st.stop()
 
 df = prepare_data(raw_df)
 
 # =========================================================
-# FILTERS
+# FILTERS SAFE
 # =========================================================
 f1,f2,f3,f4 = st.columns(4)
-with f1: unit_values=sorted([u for u in df["unit"].dropna().astype(str).unique() if u.strip()!=""]); selected_unit=st.selectbox("Pilih unit",["Semua"]+unit_values)
-with f2: rank_values=sorted([r for r in df["pangkat_standard"].dropna().astype(str).unique() if r.strip()!=""]); selected_rank=st.selectbox("Pilih pangkat",["Semua"]+rank_values)
-with f3: room_values=sorted([b for b in df["bilik"].dropna().astype(str).unique() if b.strip()!=""]); selected_room=st.selectbox("Pilih bilik",["Semua"]+room_values)
-with f4: keyword=st.text_input("Carian","Nama / no tentera / jawatan")
+with f1:
+    unit_values = sorted([str(u) for u in df["unit"].fillna("").tolist() if str(u).strip()!=""])
+    selected_unit = st.selectbox("Pilih unit",["Semua"]+unit_values)
+with f2:
+    rank_values = sorted([str(r) for r in df["pangkat_standard"].fillna("").tolist() if str(r).strip()!=""])
+    selected_rank = st.selectbox("Pilih pangkat",["Semua"]+rank_values)
+with f3:
+    room_values = sorted([str(b) for b in df["bilik"].fillna("").tolist() if str(b).strip()!=""])
+    selected_room = st.selectbox("Pilih bilik",["Semua"]+room_values)
+with f4:
+    keyword = st.text_input("Carian","Nama / no tentera / jawatan")
 
 filtered = df.copy()
-if selected_unit!="Semua": filtered=filtered[filtered["unit"]==selected_unit]
-if selected_rank!="Semua": filtered=filtered[filtered["pangkat_standard"]==selected_rank]
-if selected_room!="Semua": filtered=filtered[filtered["bilik"]==selected_room]
-if keyword.strip(): k=keyword.strip().lower(); filtered=filtered[filtered["nama_carian"].str.contains(k,na=False)|filtered["no_tentera_carian"].str.contains(k,na=False)|filtered["jawatan_carian"].str.contains(k,na=False)]
-if show_unknown_rank_only: filtered=filtered[filtered["level_pangkat"]==999]
+if selected_unit!="Semua": filtered = filtered[filtered["unit"]==selected_unit]
+if selected_rank!="Semua": filtered = filtered[filtered["pangkat_standard"]==selected_rank]
+if selected_room!="Semua": filtered = filtered[filtered["bilik"]==selected_room]
+if keyword.strip():
+    k = keyword.strip().lower()
+    filtered = filtered[
+        filtered["nama_carian"].str.contains(k,na=False) |
+        filtered["no_tentera_carian"].str.contains(k,na=False) |
+        filtered["jawatan_carian"].str.contains(k,na=False)
+    ]
+if show_unknown_rank_only: filtered = filtered[filtered["level_pangkat"]==999]
 
 duplicate_mask = filtered["no_tentera"].astype(str).duplicated(keep=False)
 duplicates_df = filtered[duplicate_mask].copy()
-if show_duplicates_only: filtered=duplicates_df.copy()
+if show_duplicates_only: filtered = duplicates_df.copy()
 
 sort_columns=["level_pangkat"]
 if sort_by_number: sort_columns.append("no_tentera_numeric")
 sort_columns.extend(["no_tentera_text","nama"])
-if not filtered.empty: filtered=filtered.sort_values(by=sort_columns,ascending=True).reset_index(drop=True)
+if not filtered.empty: filtered = filtered.sort_values(by=sort_columns,ascending=True).reset_index(drop=True)
 
 # =========================================================
 # METRICS
@@ -184,7 +171,7 @@ st.subheader("Ringkasan")
 total_records=len(df); filtered_records=len(filtered)
 duplicate_count=int(df["no_tentera"].astype(str).duplicated(keep=False).sum())
 unknown_rank_count=int((df["level_pangkat"]==999).sum())
-m1,m2,m3,m4=st.columns(4)
+m1,m2,m3,m4 = st.columns(4)
 m1.metric("Jumlah rekod",total_records); m2.metric("Rekod selepas tapis",filtered_records)
 m3.metric("Duplicate no tentera",duplicate_count); m4.metric("Pangkat tidak dikenali",unknown_rank_count)
 
@@ -217,7 +204,7 @@ st.dataframe(filtered[display_columns],use_container_width=True)
 # =========================================================
 st.subheader("Muat Turun Data Yang Telah Disusun")
 download_df=filtered[display_columns].copy()
-d1,d2=st.columns(2)
+d1,d2 = st.columns(2)
 with d1: st.download_button("⬇️ Download CSV",data=convert_df_to_csv(download_df),file_name="anggota_tentera_disusun.csv",mime="text/csv")
 with d2: st.download_button("⬇️ Download Excel",data=convert_df_to_excel(download_df),file_name="anggota_tentera_disusun.xlsx",mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
