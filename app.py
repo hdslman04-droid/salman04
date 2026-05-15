@@ -1,373 +1,177 @@
-import io
-from pathlib import Path
-import pandas as pd
+# app.py
 import streamlit as st
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from PIL import Image, ImageDraw
+import io
+import base64
 
-# =========================================================
-# CONFIG
-# =========================================================
+# -------------------- CONFIG --------------------
 st.set_page_config(
-    page_title="Sistem Hierarki Pangkat Tentera",
-    page_icon="🪖",
-    layout="wide"
+    page_title="MMR KPA (GAJI)",
+    page_icon="TDM.png",
+    layout="centered",
+    initial_sidebar_state="expanded"
 )
 
-st.title("🪖 Sistem Hierarki Pangkat Tentera")
-st.caption(
-    "Upload fail CSV/Excel untuk susun anggota mengikut hierarki pangkat, nombor tentera, "
-    "serta tapis ikut unit dan semak duplicate."
-)
+DATA_FILE = "data baru 1.csv"
+ATTENDANCE_FILE = "attendance_records.csv"
+LOGO_UGAT = "Logo-UGAT.png"
+CENTER_IMAGE = "GAMBAR BARU 3.png"
+DEFAULT_HOST_PASSWORD = "salman"
+REQUIRED_COLS = ["BIL", "NOTEN", "NAMA", "MENU", "MEJA"]
 
-# =========================================================
-# HIERARKI PANGKAT
-# =========================================================
-RANK_HIERARCHY = {
-    "jeneral": 1,
-    "leftenan jeneral": 2,
-    "mejar jeneral": 3,
-    "brigedier jeneral": 4,
-    "kolonel": 5,
-    "leftenan kolonel": 6,
-    "mejar": 7,
-    "kapten": 8,
-    "leftenan": 9,
-    "leftenan muda": 10,
-    "pegawai waran 1": 11,
-    "pegawai waran 2": 12,
-    "staf sarjan": 13,
-    "sarjan": 14,
-    "koperal": 15,
-    "lans koperal": 16,
-    "prebet": 17
-}
+# -------------------- FUNCTIONS --------------------
+def prepare_csv(file_path):
+    """Read CSV and clean up columns, add optional columns if missing"""
+    path = Path(file_path)
+    if not path.exists():
+        return pd.DataFrame(columns=REQUIRED_COLS)
 
-RANK_ALIASES = {
-    "lt jeneral": "leftenan jeneral",
-    "lt. jeneral": "leftenan jeneral",
-    "mej jeneral": "mejar jeneral",
-    "brig jen": "brigedier jeneral",
-    "brig. jeneral": "brigedier jeneral",
-    "lt kolonel": "leftenan kolonel",
-    "lt. kolonel": "leftenan kolonel",
-    "lt kol": "leftenan kolonel",
-    "lt. kol": "leftenan kolonel",
-    "captain": "kapten",
-    "capt": "kapten",
-    "lt": "leftenan",
-    "2nd lt": "leftenan muda",
-    "second lieutenant": "leftenan muda",
-    "pw1": "pegawai waran 1",
-    "pw 1": "pegawai waran 1",
-    "pw2": "pegawai waran 2",
-    "pw 2": "pegawai waran 2",
-    "ssjn": "staf sarjan",
-    "sarjan staf": "staf sarjan",
-    "lkpl": "lans koperal",
-    "l/kpl": "lans koperal",
-    "pbt": "prebet"
-}
+    df_raw = pd.read_csv(file_path, dtype=str)
+    df_raw.columns = [str(col).strip().upper() for col in df_raw.columns]
 
-REQUIRED_COLUMNS = ["nama", "no_tentera", "pangkat"]
+    # Keep only required columns, add optional if missing
+    for col in REQUIRED_COLS:
+        if col not in df_raw.columns:
+            df_raw[col] = ""
 
-COLUMN_ALIASES = {
-    "nama": ["nama", "name", "full_name", "anggota", "nama_anggota"],
-    "no_tentera": ["no_tentera", "nombor_tentera", "military_no", "no tentera", "army_no", "service_no"],
-    "pangkat": ["pangkat", "rank"],
-    "unit": ["unit", "pasukan", "batalion", "kompeni", "cawangan"],
-    "jawatan": ["jawatan", "position", "role", "appointment"],
-    "bilik": ["bilik", "room", "no_bilik", "room_no", "bilik_penginapan"]
-}
+    # Add optional columns for flexibility
+    for col in ["UNIT", "JAWATAN", "BILIK", "CATATAN"]:
+        if col not in df_raw.columns:
+            df_raw[col] = ""
 
-# =========================================================
-# HELPERS
-# =========================================================
-def normalize_text(value) -> str:
-    if pd.isna(value):
-        return ""
-    return str(value).strip().lower()
+    # Strip all string columns
+    for col in df_raw.columns:
+        df_raw[col] = df_raw[col].fillna("").astype(str).str.strip()
 
-def prettify_text(value) -> str:
-    if pd.isna(value):
-        return ""
-    return str(value).strip()
+    return df_raw
 
-def standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    original_columns = list(df.columns)
-    normalized_columns = [normalize_text(c) for c in original_columns]
-    rename_map = {}
+def read_attendance(file_path):
+    path = Path(file_path)
+    if not path.exists():
+        return pd.DataFrame(columns=REQUIRED_COLS + ["STATUS_KEHADIRAN", "TARIKH_MASA"])
+    df = pd.read_csv(path, dtype=str)
+    df.columns = [str(col).strip().upper() for col in df.columns]
+    return df
 
-    for standard_name, alias_list in COLUMN_ALIASES.items():
-        alias_set = {normalize_text(a) for a in alias_list}
-        for original, normalized in zip(original_columns, normalized_columns):
-            if normalized in alias_set and original not in rename_map:
-                rename_map[original] = standard_name
-    return df.rename(columns=rename_map)
+def save_attendance(df):
+    df.to_csv(ATTENDANCE_FILE, index=False, encoding="utf-8")
 
-def normalize_rank(rank: str) -> str:
-    r = normalize_text(rank)
-    if r in RANK_ALIASES:
-        r = RANK_ALIASES[r]
-    return r
+def get_seat_map():
+    """Return a dictionary of MEJA coordinates for highlighting"""
+    return {
+        "AR3": {"x": 76, "y": 86, "w": 42, "h": 24},
+        "AR2": {"x": 72, "y": 86, "w": 42, "h": 24},
+        "DL11": {"x": 48, "y": 33, "w": 42, "h": 24},
+        "DL12": {"x": 44, "y": 33, "w": 42, "h": 24},
+        # Add more MEJA coordinates according to your layout
+    }
 
-def get_rank_level(rank: str) -> int:
-    r = normalize_rank(rank)
-    return RANK_HIERARCHY.get(r, 999)
+def highlight_layout(group_df):
+    """Highlight the MEJA seats on the seating layout"""
+    path = Path(CENTER_IMAGE)
+    if not path.exists():
+        return None
 
-def extract_number_for_sort(value: str) -> int:
-    s = prettify_text(value)
-    digits = "".join(ch for ch in s if ch.isdigit())
-    if digits:
-        return int(digits)
-    return 999999999
+    image = Image.open(path).convert("RGBA")
+    overlay = Image.new("RGBA", image.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
 
-# ======================
-# Cache loading file
-# ======================
-try:
-    @st.cache_data
-    def load_file(uploaded_file) -> pd.DataFrame:
-        suffix = Path(uploaded_file.name).suffix.lower()
-        if suffix == ".csv":
-            df = pd.read_csv(uploaded_file)
-        elif suffix in [".xlsx", ".xls"]:
-            df = pd.read_excel(uploaded_file)
+    seat_map = get_seat_map()
+    missing_meja = []
+
+    meja_list = group_df["MEJA"].dropna().astype(str).str.strip().str.upper().unique()
+
+    for meja in meja_list:
+        if meja in seat_map:
+            info = seat_map[meja]
+            x, y, w, h = info["x"], info["y"], info["w"], info["h"]
+            draw.rectangle([x - w//2, y - h//2, x + w//2, y + h//2],
+                           fill=(0, 255, 0, 90),
+                           outline=(0, 255, 0, 255),
+                           width=4)
         else:
-            raise ValueError("Format fail tidak disokong. Sila upload CSV atau Excel.")
-        df.columns = [prettify_text(c) for c in df.columns]
-        df = standardize_columns(df)
-        return df
-except AttributeError:
-    # Fallback for older Streamlit versions
-    @st.cache
-    def load_file(uploaded_file) -> pd.DataFrame:
-        suffix = Path(uploaded_file.name).suffix.lower()
-        if suffix == ".csv":
-            df = pd.read_csv(uploaded_file)
-        elif suffix in [".xlsx", ".xls"]:
-            df = pd.read_excel(uploaded_file)
+            missing_meja.append(meja)
+
+    highlighted = Image.alpha_composite(image, overlay)
+    img_byte_arr = io.BytesIO()
+    highlighted.convert("RGB").save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    layout_base64 = base64.b64encode(img_byte_arr.getvalue()).decode()
+
+    return layout_base64, missing_meja
+
+def verify_host(password_input):
+    return password_input == DEFAULT_HOST_PASSWORD
+
+# -------------------- LOAD DATA --------------------
+df_guests = prepare_csv(DATA_FILE)
+df_attendance = read_attendance(ATTENDANCE_FILE)
+
+# -------------------- SIDEBAR HOST --------------------
+if "host_logged_in" not in st.session_state:
+    st.session_state.host_logged_in = False
+
+with st.sidebar:
+    if st.session_state.host_logged_in:
+        st.success("Logged in as Host")
+        uploaded_file = st.file_uploader("Upload CSV", type="csv")
+        if uploaded_file:
+            df_new = prepare_csv(uploaded_file)
+            df_new.to_csv(DATA_FILE, index=False)
+            save_attendance(pd.DataFrame(columns=REQUIRED_COLS + ["STATUS_KEHADIRAN", "TARIKH_MASA"]))
+            st.success("CSV uploaded and attendance reset.")
+        if st.button("Logout"):
+            st.session_state.host_logged_in = False
+    else:
+        password = st.text_input("Host Password", type="password")
+        if st.button("Login"):
+            if verify_host(password):
+                st.session_state.host_logged_in = True
+                st.success("Login successful")
+            else:
+                st.error("Wrong password")
+
+# -------------------- USER SEARCH --------------------
+st.title("Majlis Makan Malam Rejimental Penghargaan Brigedier Jeneral Dato’ Zamzuri bin Harun")
+
+search_no = st.text_input("Enter Nombor Tentera:")
+if search_no:
+    search_no = search_no.strip()
+    bil_value = ""
+    for guest in df_guests.itertuples():
+        if search_no in getattr(guest, "NOTEN"):
+            bil_value = getattr(guest, "BIL")
+            break
+
+    if bil_value:
+        group_df = df_guests[df_guests["BIL"] == bil_value]
+        st.subheader("Guest Information")
+        st.table(group_df)
+
+        layout_base64, missing_meja = highlight_layout(group_df)
+        if layout_base64:
+            st.image(f"data:image/png;base64,{layout_base64}", use_column_width=True)
+            if missing_meja:
+                st.warning(f"These MEJA are missing in layout: {', '.join(missing_meja)}")
+
+        all_present = all([n in df_attendance["NOTEN"].tolist() for n in group_df["NOTEN"].tolist()])
+        if all_present:
+            st.success("✅ All marked as present")
+        elif st.session_state.host_logged_in:
+            if st.button("Submit / Mark Attendance for this group"):
+                now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur")).strftime("%Y-%m-%d %H:%M:%S")
+                for guest in group_df.itertuples():
+                    if guest.NOTEN not in df_attendance["NOTEN"].tolist():
+                        df_attendance.loc[len(df_attendance)] = [
+                            guest.BIL, guest.NOTEN, guest.NAMA, guest.MENU, guest.MEJA, "HADIR", now
+                        ]
+                save_attendance(df_attendance)
+                st.success("Attendance submitted")
         else:
-            raise ValueError("Format fail tidak disokong. Sila upload CSV atau Excel.")
-        df.columns = [prettify_text(c) for c in df.columns]
-        df = standardize_columns(df)
-        return df
-
-def validate_columns(df: pd.DataFrame):
-    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
-    return missing
-
-def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
-    data = df.copy()
-    for col in data.columns:
-        if data[col].dtype == "object":
-            data[col] = data[col].astype(str).str.strip()
-
-    for optional_col in ["unit", "jawatan", "bilik"]:
-        if optional_col not in data.columns:
-            data[optional_col] = ""
-
-    data["pangkat_asal"] = data["pangkat"]
-    data["pangkat_standard"] = data["pangkat"].apply(normalize_rank)
-    data["level_pangkat"] = data["pangkat_standard"].apply(get_rank_level)
-    data["nama_carian"] = data["nama"].fillna("").str.lower()
-    data["no_tentera_carian"] = data["no_tentera"].fillna("").str.lower()
-    data["unit_carian"] = data["unit"].fillna("").str.lower()
-    data["jawatan_carian"] = data["jawatan"].fillna("").str.lower()
-    data["bilik_carian"] = data["bilik"].fillna("").str.lower()
-    data["no_tentera_numeric"] = data["no_tentera"].apply(extract_number_for_sort)
-    data["no_tentera_text"] = data["no_tentera"].fillna("").astype(str)
-    return data
-
-def convert_df_to_csv(df: pd.DataFrame) -> bytes:
-    return df.to_csv(index=False).encode("utf-8-sig")
-
-def convert_df_to_excel(df: pd.DataFrame) -> bytes:
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="hierarki_tentera")
-    return output.getvalue()
-
-def build_rank_summary(df: pd.DataFrame) -> pd.DataFrame:
-    summary = (
-        df.groupby(["level_pangkat", "pangkat_standard"], dropna=False)
-        .size()
-        .reset_index(name="jumlah")
-        .sort_values(["level_pangkat", "pangkat_standard"])
-    )
-    return summary
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-st.sidebar.header("Tetapan Sistem")
-uploaded_file = st.sidebar.file_uploader("Upload fail anggota", type=["csv", "xlsx", "xls"])
-sort_by_number = st.sidebar.checkbox("Susun nombor tentera", value=True)
-show_unknown_rank_only = st.sidebar.checkbox("Tunjuk pangkat tidak dikenali sahaja", value=False)
-show_duplicates_only = st.sidebar.checkbox("Tunjuk duplicate nombor tentera sahaja", value=False)
-
-# =========================================================
-# MAIN LOGIC
-# =========================================================
-if uploaded_file is None:
-    st.info("Sila upload fail CSV atau Excel untuk mula.")
-    st.stop()
-
-try:
-    raw_df = load_file(uploaded_file)
-except Exception as e:
-    st.error(f"Gagal membaca fail: {e}")
-    st.stop()
-
-missing_cols = validate_columns(raw_df)
-if missing_cols:
-    st.error(
-        "Kolum wajib tiada dalam fail anda: " + ", ".join(missing_cols)
-    )
-    st.write("Kolum yang sistem jumpa:", list(raw_df.columns))
-    st.stop()
-
-df = prepare_data(raw_df)
-
-# =========================================================
-# FILTERS
-# =========================================================
-f1, f2, f3, f4 = st.columns(4)
-with f1:
-    unit_values = sorted([u for u in df["unit"].dropna().astype(str).unique() if u.strip() != ""])
-    selected_unit = st.selectbox("Pilih unit", ["Semua"] + unit_values)
-
-with f2:
-    rank_values = sorted([r for r in df["pangkat_standard"].dropna().astype(str).unique() if r.strip() != ""])
-    selected_rank = st.selectbox("Pilih pangkat", ["Semua"] + rank_values)
-
-with f3:
-    room_values = sorted([b for b in df["bilik"].dropna().astype(str).unique() if b.strip() != ""])
-    selected_room = st.selectbox("Pilih bilik", ["Semua"] + room_values)
-
-with f4:
-    keyword = st.text_input("Carian", placeholder="Nama / no tentera / jawatan")
-
-filtered = df.copy()
-if selected_unit != "Semua":
-    filtered = filtered[filtered["unit"] == selected_unit]
-if selected_rank != "Semua":
-    filtered = filtered[filtered["pangkat_standard"] == selected_rank]
-if selected_room != "Semua":
-    filtered = filtered[filtered["bilik"] == selected_room]
-if keyword.strip():
-    k = keyword.strip().lower()
-    filtered = filtered[
-        filtered["nama_carian"].str.contains(k, na=False)
-        | filtered["no_tentera_carian"].str.contains(k, na=False)
-        | filtered["jawatan_carian"].str.contains(k, na=False)
-    ]
-if show_unknown_rank_only:
-    filtered = filtered[filtered["level_pangkat"] == 999]
-
-duplicate_mask = filtered["no_tentera"].astype(str).duplicated(keep=False)
-duplicates_df = filtered[duplicate_mask].copy()
-if show_duplicates_only:
-    filtered = duplicates_df.copy()
-
-sort_columns = ["level_pangkat"]
-if sort_by_number:
-    sort_columns.append("no_tentera_numeric")
-sort_columns.extend(["no_tentera_text", "nama"])
-
-if not filtered.empty:
-    filtered = filtered.sort_values(by=sort_columns, ascending=True).reset_index(drop=True)
-
-# =========================================================
-# METRICS
-# =========================================================
-st.subheader("Ringkasan")
-total_records = len(df)
-filtered_records = len(filtered)
-duplicate_count = int(df["no_tentera"].astype(str).duplicated(keep=False).sum())
-unknown_rank_count = int((df["level_pangkat"] == 999).sum())
-
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Jumlah rekod", total_records)
-m2.metric("Rekod selepas tapis", filtered_records)
-m3.metric("Duplicate no tentera", duplicate_count)
-m4.metric("Pangkat tidak dikenali", unknown_rank_count)
-
-# =========================================================
-# RANK SUMMARY
-# =========================================================
-st.subheader("Rumusan Mengikut Hierarki Pangkat")
-rank_summary = build_rank_summary(filtered)
-st.dataframe(rank_summary, use_container_width=True)
-
-# =========================================================
-# DUPLICATES
-# =========================================================
-st.subheader("Semakan Duplicate Nombor Tentera")
-if len(duplicates_df) > 0:
-    st.warning("Terdapat duplicate nombor tentera dalam data yang ditapis.")
-    duplicate_display_cols = [c for c in ["nama", "no_tentera", "pangkat", "unit", "jawatan", "bilik"] if c in duplicates_df.columns]
-    st.dataframe(
-        duplicates_df[duplicate_display_cols].sort_values(["no_tentera", "nama"]),
-        use_container_width=True
-    )
-else:
-    st.success("Tiada duplicate nombor tentera dikesan untuk data yang ditapis.")
-
-# =========================================================
-# MAIN TABLE
-# =========================================================
-st.subheader("Senarai Anggota Mengikut Hierarki")
-display_columns = [c for c in ["nama", "no_tentera", "pangkat", "pangkat_standard", "level_pangkat", "unit", "jawatan", "bilik"] if c in filtered.columns]
-st.dataframe(filtered[display_columns], use_container_width=True)
-
-# =========================================================
-# DOWNLOAD
-# =========================================================
-st.subheader("Muat Turun Data Yang Telah Disusun")
-download_df = filtered[display_columns].copy()
-
-d1, d2 = st.columns(2)
-with d1:
-    st.download_button(
-        label="⬇️ Download CSV",
-        data=convert_df_to_csv(download_df),
-        file_name="anggota_tentera_disusun.csv",
-        mime="text/csv"
-    )
-with d2:
-    st.download_button(
-        label="⬇️ Download Excel",
-        data=convert_df_to_excel(download_df),
-        file_name="anggota_tentera_disusun.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-# =========================================================
-# CHAIN OF COMMAND PREVIEW
-# =========================================================
-st.subheader("Paparan Ringkas Chain of Command")
-preview_df = filtered[display_columns].copy()
-if not preview_df.empty:
-    preview_df = preview_df.sort_values(sort_columns).head(20)
-
-if preview_df.empty:
-    st.info("Tiada data untuk dipaparkan.")
-else:
-    for _, row in preview_df.iterrows():
-        pangkat = str(row.get("pangkat_standard", "")).title()
-        nama = str(row.get("nama", ""))
-        no_tentera = str(row.get("no_tentera", ""))
-        unit = str(row.get("unit", ""))
-        jawatan = str(row.get("jawatan", ""))
-        bilik = str(row.get("bilik", ""))
-        line = f"**{pangkat}** — {nama} ({no_tentera})"
-        extras = [x for x in [unit, jawatan, f"Bilik: {bilik}" if bilik.strip() else ""] if x.strip()]
-        if extras:
-            line += " | " + " | ".join(extras)
-        st.write(line)
-
-# =========================================================
-# RAW DATA
-# =========================================================
-with st.expander("Lihat data asal"):
-    st.dataframe(raw_df, use_container_width=True)
+            st.warning("❌ Not all marked as present. Login as Host to submit.")
+    else:
+        st.warning("No record found")
