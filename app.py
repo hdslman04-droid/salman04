@@ -67,9 +67,6 @@ RANK_ALIASES = {
     "pbt": "prebet"
 }
 
-# =========================================================
-# REQUIRED COLUMNS & ALIASES
-# =========================================================
 REQUIRED_COLUMNS = ["nama", "no_tentera", "pangkat"]
 
 COLUMN_ALIASES = {
@@ -172,11 +169,12 @@ except AttributeError:
         return df
 
 # =========================================================
-# PREPARE DATA (FIXED)
+# PREPARE DATA (SAFE)
 # =========================================================
 def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     data = df.copy()
 
+    # Bersihkan semua kolum object safely
     for col in data.columns:
         try:
             if hasattr(data[col], "dtype") and data[col].dtype == "object":
@@ -184,20 +182,27 @@ def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
         except Exception:
             data[col] = data[col].apply(lambda x: "" if pd.isna(x) else str(x).strip())
 
-    for optional_col in ["unit", "jawatan", "bilik"]:
+    # Pastikan kolum optional wujud
+    for optional_col in ["unit", "jawatan", "bilik", "kompeni", "platun", "subunit"]:
         if optional_col not in data.columns:
             data[optional_col] = ""
 
+    # Simpan nilai asal
     data["pangkat_asal"] = data.get("pangkat", "")
+
+    # Standardkan pangkat
     data["pangkat_standard"] = data["pangkat"].apply(normalize_rank)
     data["level_pangkat"] = data["pangkat_standard"].apply(get_rank_level)
 
-    data["nama_carian"] = data["nama"].fillna("").astype(str).str.lower()
-    data["no_tentera_carian"] = data["no_tentera"].fillna("").astype(str).str.lower()
-    data["unit_carian"] = data["unit"].fillna("").astype(str).str.lower()
-    data["jawatan_carian"] = data["jawatan"].fillna("").astype(str).str.lower()
-    data["bilik_carian"] = data["bilik"].fillna("").astype(str).str.lower()
+    # Medan carian safe
+    for col in ["nama", "no_tentera", "unit", "jawatan", "bilik", "kompeni", "platun", "subunit"]:
+        search_col = f"{col}_carian"
+        try:
+            data[search_col] = data[col].fillna("").astype(str).str.lower()
+        except Exception:
+            data[search_col] = data[col].apply(lambda x: "" if pd.isna(x) else str(x).lower())
 
+    # Sorting nombor tentera
     data["no_tentera_numeric"] = data["no_tentera"].apply(extract_number_for_sort)
     data["no_tentera_text"] = data["no_tentera"].fillna("").astype(str)
 
